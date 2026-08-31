@@ -1,0 +1,43 @@
+PERFORMANCE BEST PRACTICES FOR SYSTEM ARCHITECTURE
+
+Caching Strategy:
+- Cache frequently accessed, rarely changed data in Redis
+- Implement cache-aside pattern for database queries
+- Use HTTP caching headers (ETags, Cache-Control) for API responses
+- Cache computed results for expensive operations
+- Implement cache warming for predictable load patterns
+
+Database Performance:
+- Index all columns used in WHERE, JOIN, and ORDER BY clauses
+- Use EXPLAIN ANALYZE to identify slow queries
+- Implement connection pooling (PgBouncer for PostgreSQL)
+- Use batch operations instead of N+1 queries
+- Archive old data to keep tables small and fast
+
+Async & Non-blocking:
+- Use async/await for I/O-bound operations
+- Offload heavy processing to background workers
+- Use WebSockets for real-time bidirectional communication
+- Implement server-sent events for one-way real-time updates
+- Use streaming for large data transfers
+
+API Performance:
+- Implement pagination for list endpoints
+- Use GraphQL for flexible data fetching
+- Compress API responses with gzip or brotli
+- Use HTTP/2 for multiplexed connections
+- Implement request batching for bulk operations
+
+Frontend Performance:
+- Serve assets via CDN with long cache TTLs
+- Use lazy loading for images and components
+- Implement code splitting to reduce initial bundle size
+- Use service workers for offline capability
+- Optimize images (WebP format, responsive images)
+
+Monitoring:
+- Set response time SLAs (p50, p95, p99 latencies)
+- Use APM tools (Datadog, New Relic) for performance visibility
+- Implement distributed tracing (Jaeger, Zipkin)
+- Alert on latency degradation before users notice
+- Profile CPU and memory usage regularly

@@ -1,0 +1,38 @@
+COST OPTIMIZATION BEST PRACTICES
+
+Right-sizing:
+- Start small and scale up based on actual metrics
+- Use t3/t4g instances for variable workloads
+- Use spot/preemptible instances for batch processing
+- Regularly review and downsize over-provisioned resources
+- Use graviton/ARM instances for better price/performance
+
+Managed Services:
+- Use managed databases (RDS, Cloud SQL) over self-managed
+- Use serverless functions (Lambda) for intermittent workloads
+- Use managed Kubernetes (EKS, GKE) over self-managed clusters
+- Use managed caching (ElastiCache) over self-managed Redis
+
+Storage Cost:
+- Use S3 intelligent tiering for infrequently accessed data
+- Implement lifecycle policies to move old data to cold storage
+- Compress and deduplicate data before storage
+- Delete unused snapshots, volumes, and backups regularly
+
+Network Cost:
+- Minimize cross-region data transfer
+- Use CDN to reduce origin server egress costs
+- Keep services in same availability zone when possible
+- Use VPC endpoints to avoid NAT gateway costs
+
+Auto-scaling & Scheduling:
+- Scale down non-production environments outside business hours
+- Use scheduled scaling for predictable traffic patterns
+- Implement auto-scaling to avoid over-provisioning at rest
+- Use reserved instances for baseline, spot for burst
+
+Monitoring Cost:
+- Set up billing alerts and budget thresholds
+- Use cost allocation tags to track spending by service
+- Review cost anomalies weekly
+- Use AWS Cost Explorer or GCP Cost Management regularly

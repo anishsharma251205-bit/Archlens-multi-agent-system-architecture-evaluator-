@@ -1,0 +1,44 @@
+SCALABILITY BEST PRACTICES FOR SYSTEM ARCHITECTURE
+
+Horizontal Scaling:
+- Design stateless services that can run as multiple instances
+- Use a load balancer (ALB, Nginx) to distribute traffic
+- Store session state externally in Redis, not in-memory
+- Use connection pooling to manage database connections efficiently
+
+Database Scaling:
+- Use read replicas for read-heavy workloads
+- Implement database sharding for write-heavy workloads
+- Use managed database services (RDS, Cloud SQL) for automatic failover
+- Implement caching layer (Redis, Memcached) to reduce DB load
+- Use CQRS pattern to separate read and write models
+
+Message Queues & Async Processing:
+- Use message queues (Kafka, SQS, RabbitMQ) for async tasks
+- Decouple services using event-driven architecture
+- Implement retry logic with exponential backoff for failed messages
+- Use dead letter queues for unprocessable messages
+
+Auto-scaling:
+- Configure auto-scaling groups based on CPU and memory metrics
+- Set minimum and maximum instance counts
+- Use predictive scaling for known traffic patterns
+- Implement graceful shutdown for zero-downtime deployments
+
+Microservices:
+- Each service should own its own database
+- Services should communicate via APIs or message queues
+- Implement circuit breakers to prevent cascade failures
+- Use service mesh (Istio) for complex microservice communication
+
+CDN & Caching:
+- Serve static assets via CDN (CloudFront, Cloudflare)
+- Implement multi-layer caching (CDN, application, database)
+- Use cache invalidation strategies (TTL, event-based)
+- Cache at the edge for globally distributed users
+
+Fault Tolerance:
+- Implement health checks for all services
+- Use circuit breaker pattern (Hystrix, Resilience4j)
+- Design for graceful degradation under load
+- Implement bulkhead pattern to isolate failures

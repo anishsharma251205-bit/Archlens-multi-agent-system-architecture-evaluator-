@@ -1,0 +1,43 @@
+STRUCTURAL BEST PRACTICES FOR SYSTEM ARCHITECTURE
+
+Architecture Patterns:
+- Choose architecture pattern based on team size and scale requirements
+- Monolith is valid for small teams and early-stage products
+- Migrate to microservices only when scaling pain is real
+- Use strangler fig pattern for incremental monolith decomposition
+- Document architecture decisions in ADRs (Architecture Decision Records)
+
+Separation of Concerns:
+- Separate frontend, backend, and data layers clearly
+- Use layered architecture (presentation, business, data)
+- Keep business logic out of controllers and UI components
+- Use repository pattern to abstract data access
+- Implement domain-driven design for complex business domains
+
+API Design:
+- Follow RESTful conventions for resource-based APIs
+- Version APIs from day one (/v1/, /v2/)
+- Use OpenAPI/Swagger for API documentation
+- Implement consistent error response format
+- Use idempotency keys for non-idempotent operations
+
+Dependency Management:
+- Use dependency injection to decouple components
+- Define clear interfaces between services
+- Avoid circular dependencies between modules
+- Pin dependency versions for reproducible builds
+- Regularly audit and update dependencies
+
+Data Modeling:
+- Normalize data to avoid duplication
+- Use appropriate data types for each field
+- Design for the access patterns, not just the data
+- Use UUIDs instead of sequential IDs for distributed systems
+- Implement soft deletes for audit trail preservation
+
+Documentation:
+- Maintain up-to-date system architecture diagrams
+- Document all API contracts and data schemas
+- Write runbooks for common operational tasks
+- Keep README files current with setup instructions
+- Document failure modes and recovery procedures

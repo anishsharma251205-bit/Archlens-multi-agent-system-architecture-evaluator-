@@ -1,0 +1,44 @@
+SECURITY BEST PRACTICES FOR SYSTEM ARCHITECTURE
+
+Authentication & Authorization:
+- Always use JWT or OAuth2 for stateless authentication
+- Implement Role-Based Access Control (RBAC) for all endpoints
+- Never store passwords in plaintext — use bcrypt or argon2 hashing
+- Implement token refresh mechanisms with short expiry times
+- Use API keys for service-to-service communication
+
+Encryption:
+- Enforce HTTPS/TLS 1.3 on all endpoints — never allow HTTP in production
+- Encrypt sensitive data at rest using AES-256
+- Use envelope encryption for database fields containing PII
+- Rotate encryption keys regularly using a secrets manager
+
+Secrets Management:
+- Never hardcode credentials in source code or config files
+- Use AWS Secrets Manager, HashiCorp Vault, or environment variables
+- Rotate secrets automatically on a schedule
+- Audit secret access with logging
+
+Network Security:
+- Deploy behind a VPC with private subnets for backend services
+- Use security groups to restrict inbound/outbound traffic
+- Implement WAF (Web Application Firewall) for public endpoints
+- Enable DDoS protection via CloudFront or AWS Shield
+
+Input Validation:
+- Validate and sanitize all user inputs server-side
+- Implement rate limiting per IP and per user
+- Use parameterized queries to prevent SQL injection
+- Validate content-type and size of all file uploads
+
+Payment Security:
+- Never store raw card data — use tokenization
+- Comply with PCI-DSS standards for payment processing
+- Use 3D Secure for high-value transactions
+- Implement idempotency keys for payment APIs
+
+Monitoring & Auditing:
+- Log all authentication events with timestamps and IP addresses
+- Set up alerts for unusual access patterns
+- Implement audit trails for sensitive data access
+- Use SIEM for centralized security monitoring
