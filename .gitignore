@@ -1,5 +1,15 @@
+
 # Environment variables
 .env
+.env.*
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+.venv/
 
 # Node modules
 node_modules/
@@ -11,6 +21,12 @@ build/
 # Logs
 *.log
 
+# SQLite / local databases
+*.db
+*.sqlite
+*.sqlite3
+data/mlops.db
+
 # VS Code
 .vscode/
 
@@ -18,5 +34,3 @@ build/
 .DS_Store
 Thumbs.db
 
-__pycache__/
-venv/
