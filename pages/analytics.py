@@ -612,7 +612,7 @@ if recent:
 
         rows.append(
             {
-                "Run": f"RUN-{len(recent) - index:03d}",
+                "Run": f"RUN-{run['id']:03d}",
                 "Timestamp": run.get("timestamp", "")[:19],
                 "Complexity": str(run["complexity"]).upper(),
                 "Score": round(score, 2),
