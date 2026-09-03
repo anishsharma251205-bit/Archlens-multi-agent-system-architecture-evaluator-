@@ -1,8 +1,6 @@
-# ArchLens
+# ArchLens – Multi-Agent System Architecture Evaluator
 
-## Multi-Agent AI System Architecture Evaluator
-
-ArchLens is an AI-powered system that evaluates software architectures across five engineering dimensions:
+ArchLens is a multi-agent AI system that evaluates software architectures across five engineering dimensions:
 
 * Structure
 * Security
@@ -10,26 +8,23 @@ ArchLens is an AI-powered system that evaluates software architectures across fi
 * Performance
 * Cost
 
-Instead of relying on a single LLM response, ArchLens uses five specialized agents that evaluate different parts of an architecture concurrently. Their results are validated, scored, tracked, and combined into a final architecture report.
+It supports both **text-based architecture evaluation** and **diagram/image-based evaluation using LLaVA**.
 
----
+The goal is to turn an architecture description or diagram into a structured engineering review with scores, issues, recommendations, and an overall architecture score.
 
 # Problem
 
-Architecture reviews require reasoning about multiple engineering concerns at the same time.
+Architecture reviews are usually manual and depend heavily on the experience of the reviewer.
 
-A system can be well designed from a structural perspective while still having:
+A system may look reasonable at a high level but still have problems such as:
 
-* Security vulnerabilities
-* Database bottlenecks
-* Single points of failure
-* Poor scaling strategies
-* Performance issues
-* Unnecessary infrastructure costs
+* Missing components or unclear service boundaries
+* Security weaknesses
+* Scalability bottlenecks
+* Performance risks
+* Unnecessary infrastructure cost
 
-ArchLens attempts to automate the initial architecture review by separating these concerns into specialized agents.
-
----
+ArchLens automates this review by splitting the evaluation into multiple specialized agents instead of asking a single LLM to evaluate everything.
 
 # Architecture
 
@@ -45,6 +40,9 @@ flowchart TD
     C --> G[Performance Agent]
     C --> H[Cost Agent]
 
+    A --> V[LLaVA Vision Model]
+    V --> C
+
     D --> I[RAG / FAISS]
     E --> I
     F --> I
@@ -55,268 +53,214 @@ flowchart TD
 
     J --> K[Guardrail Validation]
 
-    K -->|Invalid| L[Retry / Fallback]
+    K -->|Invalid Output| L[Retry / Fallback]
     L --> J
 
-    K -->|Valid| M[Scoring Engine]
+    K -->|Valid Output| M[Scoring Engine]
 
     M --> N[Final Report]
 
     N --> O[MLOps Tracker]
-
     O --> P[(SQLite)]
 
     P --> Q[Analytics Dashboard]
 ```
 
----
-
-# How the System Works
+# How It Works
 
 ## 1. Architecture Input
 
-The user provides a description of the system architecture.
+The user can provide an architecture description for evaluation.
 
-For example:
+ArchLens can also work with an architecture diagram/image.
+
+For image-based evaluation, the diagram is processed using **LLaVA running locally through Ollama**.
 
 ```text
-A video streaming platform using:
+Text Input
+    ↓
+Architecture Evaluation
 
-React
-Flutter
-Node.js microservices
-Kubernetes
-AWS
-PostgreSQL
-MongoDB
-Redis
-Kafka
-CloudFront
-S3
-Elasticsearch
+Diagram/Image
+    ↓
+LLaVA
+    ↓
+Architecture Information
+    ↓
+Architecture Evaluation
 ```
 
-ArchLens first determines the approximate complexity of the architecture.
+## 2. Complexity Classification
 
----
+The architecture is first classified based on its complexity.
 
-## 2. Model Routing
-
-The router chooses the appropriate inference path based on the architecture complexity.
+The classification determines how the system routes model requests.
 
 ```text
 Simple / Medium
-       |
-       v
-    Ollama
-       |
-       v
- Local inference
-
+       ↓
+Ollama
+       ↓
+Local Mistral
 
 Complex
-       |
-       v
-  OpenRouter
-       |
-       v
-External model
+       ↓
+OpenRouter
+       ↓
+Configured Cloud Model
 ```
 
-If an external model fails, ArchLens can retry and fall back to another model or local Ollama inference.
+Fallback mechanisms are available when a selected model fails.
 
-The actual model used is recorded in MLOps.
+## 3. Five Specialized Agents
 
----
-
-# 3. Multi-Agent Evaluation
-
-The architecture is divided into five evaluation dimensions.
+ArchLens uses five independent evaluation agents.
 
 ### Structure Agent
 
-Evaluates:
+Checks:
 
+* Component organization
 * Service boundaries
-* Coupling
-* Responsibilities
 * Communication patterns
-* Overall organization
+* Architectural clarity
 
 ### Security Agent
 
-Evaluates:
+Checks:
 
-* Authentication
-* Authorization
-* Secrets management
-* Encryption
-* IAM
-* Rate limiting
-* Network security
+* Authentication and authorization
+* Data protection
+* Attack surfaces
+* Security controls
 
 ### Scalability Agent
 
-Evaluates:
+Checks:
 
 * Horizontal scaling
-* Database scaling
-* Caching
-* Load balancing
-* Queues
-* Single points of failure
+* Bottlenecks
+* Load handling
+* Service scalability
 
 ### Performance Agent
 
-Evaluates:
+Checks:
 
 * Latency
-* Database bottlenecks
-* Network overhead
+* Throughput
+* Database access
 * Caching
-* CDN usage
-* Resource utilization
+* Processing bottlenecks
 
 ### Cost Agent
 
-Evaluates:
+Checks:
 
-* Compute resources
-* Storage
-* Network usage
-* Infrastructure choices
-* Potential over-provisioning
+* Infrastructure usage
+* Unnecessary services
+* Resource consumption
+* Potential cost optimization
 
----
+## 4. Concurrent Agent Execution
 
-# 4. Concurrent Agent Execution
+The five agents are executed concurrently using Python's `ThreadPoolExecutor`.
 
-The five agents are not executed sequentially.
-
-A sequential approach would look like:
+Instead of waiting for each agent sequentially:
 
 ```text
 Structure
-   |
 Security
-   |
 Scalability
-   |
 Performance
-   |
 Cost
 ```
 
-ArchLens instead uses concurrent execution:
+the system runs the agent evaluations concurrently.
 
-```text
-                    +-- Structure Agent ----+
-                    |                       |
-                    +-- Security Agent -----+
-                    |                       |
-Architecture -------+-- Scalability Agent --+----> Results
-                    |                       |
-                    +-- Performance Agent --+
-                    |                       |
-                    +-- Cost Agent ---------+
-```
+Each agent independently goes through the retrieval, model routing, validation, and scoring pipeline.
 
-The orchestrator uses Python's `ThreadPoolExecutor` to execute the five evaluation tasks concurrently.
+This reduces unnecessary waiting when multiple independent evaluations are required.
 
-Each agent independently performs:
+## 5. RAG and FAISS
 
-```text
-Agent
-  |
-Build Prompt
-  |
-Retrieve Context
-  |
-Route to Model
-  |
-Validate Response
-  |
-Return Result
-```
+ArchLens uses a knowledge base containing architecture best practices.
 
-This allows different agents to use different models when required.
+The knowledge base is indexed using **FAISS**, with embeddings generated using Hugging Face/SentenceTransformers.
 
-For example:
-
-```text
-Structure Agent    -> Ollama
-Security Agent     -> OpenRouter
-Scalability Agent  -> OpenRouter
-Performance Agent  -> Ollama
-Cost Agent         -> OpenRouter
-```
-
-The model used by each agent is tracked separately.
-
----
-
-# 5. RAG with FAISS
-
-ArchLens uses a retrieval layer containing architecture best practices.
+During evaluation:
 
 ```text
 Agent Query
-    |
-Embedding Model
-    |
-FAISS Search
-    |
-Relevant Architecture Knowledge
-    |
+    ↓
+Embedding
+    ↓
+FAISS Retrieval
+    ↓
+Relevant Best Practices
+    ↓
 LLM
+    ↓
+Evaluation
 ```
 
-The retrieval system uses:
+The retrieved context helps the agents ground their recommendations in predefined architectural practices instead of relying entirely on model-generated reasoning.
 
-* Hugging Face embeddings
-* Sentence Transformers
-* FAISS
+## 6. LLM Routing
 
-This provides relevant architectural context to the agents before they generate their evaluation.
+ArchLens supports different model providers depending on the evaluation requirements.
 
----
+### Local Models
 
-# 6. Guardrails
+Ollama is used for local inference.
 
-LLM responses are not always returned in the expected format.
+Current local models include:
 
-During development, malformed JSON and missing fields caused downstream scoring failures.
+* Mistral
+* LLaVA for image/diagram analysis
 
-ArchLens therefore validates every agent response before processing it.
+### OpenRouter
+
+OpenRouter is used for cloud-based model inference, particularly for more complex evaluations.
+
+The router also supports:
+
+* Multiple OpenRouter models
+* Retry logic
+* Timeouts
+* Fallback models
+* Ollama fallback
+
+The actual model used during an evaluation is tracked by the MLOps system.
+
+## 7. Guardrails
+
+LLM responses are validated before they are accepted by the evaluation pipeline.
+
+The expected output contains:
+
+```text
+score
+issues
+recommendations
+summary
+```
 
 The guardrail checks:
 
-* JSON structure
+* Output type
 * Score range
-* Issue format
-* Recommendation format
-* Severity
-* Summary
+* Required fields
+* Issue structure
+* Severity values
+* Recommendation validity
+* Summary validity
 
-If the response is invalid, the system retries the model with a corrective prompt.
+If the model produces invalid output, the system retries the request instead of passing malformed data to the scoring system.
 
-```text
-LLM
- |
-Validate
- |
- +---- Valid ------> Scoring
- |
- Invalid
- |
-Retry
-```
+## 8. Scoring
 
----
-
-# 7. Scoring
-
-Each agent produces a score between `0` and `10`.
+Each agent produces a score between 0 and 10.
 
 The scoring engine combines the five dimensions into a final architecture score.
 
@@ -326,148 +270,120 @@ Security
 Scalability
 Performance
 Cost
-      |
-      v
+       ↓
 Weighted Scoring
-      |
-      v
-Final Score / 10
+       ↓
+Final Score
 ```
 
-Scoring is kept separate from LLM-generated explanations so that the evaluation logic remains deterministic.
+The final result includes the individual dimension scores and overall architecture assessment.
 
----
+## 9. MLOps Tracking
 
-# 8. MLOps
+ArchLens tracks evaluation information using SQLite.
 
-ArchLens also tracks the performance of its own AI pipeline.
+The system records information such as:
 
-The system records:
-
-* Model used
+* Evaluation timestamp
 * Architecture complexity
-* Total latency
+* Model used
 * Agent latency
 * Agent success
 * JSON validity
-* Individual scores
+* Dimension scores
 * Final score
-* JSON failures
-* Hallucination flags
+* Errors
+* Hallucination-related flags
 
-The data is stored locally using SQLite.
+This makes it possible to analyze how the evaluation system behaves over time.
 
-```text
-Evaluation
-    |
-MLOps Tracker
-    |
-SQLite
-    |
-Analytics
-```
+## 10. Analytics Dashboard
 
-The runtime database is excluded from Git using `.gitignore`.
+The Streamlit analytics dashboard provides visibility into system performance.
 
----
+It includes:
 
-# 9. Analytics
-
-The Streamlit analytics dashboard provides visibility into previous evaluations and system behaviour.
-
-It currently tracks:
-
-* Total evaluations
-* Average latency
-* JSON failure rate
-* Mean score
-* Accuracy
-* Score deviation
-* MAE
-* Model usage
+* System health metrics
+* Evaluation score trends
 * Complexity distribution
-* Score trends
+* Model usage
+* Quality metrics
+* Recent evaluations
 * Evaluation history
 
-The analytics system was also used during development to identify failures in the evaluation pipeline.
+The dashboard uses Plotly for visualization.
 
----
+# Image / Diagram Evaluation
 
-# Problems We Faced
+ArchLens also supports architecture diagrams.
 
-Building ArchLens involved several engineering problems beyond simply connecting an LLM to the application.
+The current image evaluation pipeline uses **LLaVA locally through Ollama**.
 
-## RAG Initialization
+```text
+Architecture Diagram
+        ↓
+      LLaVA
+        ↓
+Visual Architecture Understanding
+        ↓
+Architecture Information
+        ↓
+Five-Agent Evaluation
+        ↓
+Scoring + Report
+```
 
-Some agents initially reached the retrieval layer before the embedding model was available.
+This allows ArchLens to evaluate an architecture even when the information is primarily represented visually rather than as text.
 
-This caused:
+The local LLaVA setup is currently intended for development/local execution.
+
+# Problems Faced During Development
+
+## RAG Model Initialization
+
+The retriever initially encountered errors where the embedding model was not initialized correctly:
 
 ```text
 'NoneType' object has no attribute 'encode'
 ```
 
-We fixed this by implementing controlled lazy initialization and validation for the FAISS index, chunks, and embedding model.
+This was fixed by introducing controlled lazy initialization, validation, and safer shared model/index handling.
 
----
+## Invalid LLM Responses
 
-## Malformed LLM Output
+LLMs occasionally returned malformed or unexpected JSON.
 
-Models occasionally returned invalid JSON or incomplete structures.
+The solution was to introduce strict schema validation and retry logic before accepting an agent result.
 
-Examples included:
+## Model Attribution During Concurrent Execution
 
-* Missing fields
-* Invalid score types
-* Empty recommendations
-* Unexpected JSON structures
+Because the five agents run concurrently, tracking which model actually produced each result required explicit per-agent model tracking.
 
-We introduced strict validation and retry logic so invalid responses do not reach the scoring layer.
-
----
-
-## Concurrent Model Attribution
-
-Because five agents execute concurrently, model information could be incorrectly associated with agent logs.
-
-We changed the orchestration logic so each agent keeps track of the actual model used before writing its MLOps entry.
-
----
+The orchestrator now records the actual model used by each agent.
 
 ## OpenRouter Failures
 
-External model requests can fail because of timeouts, API errors, rate limits, or invalid responses.
+Cloud model requests can fail because of timeouts, API errors, or malformed responses.
 
-We added:
+The router now includes:
 
 * Request timeouts
 * Retries
-* Multiple model options
-* Ollama fallback
+* Retry delays
+* Multiple configured models
+* Local Ollama fallback
 
-This makes the pipeline more resilient to individual model failures.
+## SQLite Analytics
 
----
+The analytics system initially encountered errors caused by positional tuple access when the database query structure changed.
 
-## SQLite Analytics Bug
-
-While expanding the analytics dashboard, the database query structure and Python tuple indexing became inconsistent, resulting in:
-
-```text
-IndexError: tuple index out of range
-```
-
-The original analytics implementation also displayed only the latest ten evaluations.
-
-We changed the database access to use SQLite `Row` objects and named columns, allowing the analytics layer to reliably access the complete evaluation history.
-
----
+The database layer was updated to use SQLite `Row` objects and named columns, making the analytics code more reliable.
 
 # Project Structure
 
 ```text
-ArchLens/
-|
+Archlens-multi-agent-system-architecture-evaluator/
+│
 ├── agents/
 │   └── orchestrator.py
 │
@@ -493,34 +409,35 @@ ArchLens/
 ├── tests/
 │
 ├── .devcontainer/
+│
 ├── .env.example
 ├── .gitignore
+├── README.md
 ├── app.py
-├── requirements.txt
-└── README.md
+└── requirements.txt
 ```
-
----
 
 # Tech Stack
 
-```text
-Python
-Streamlit
-Ollama
-OpenRouter
-Hugging Face
-Sentence Transformers
-FAISS
-SQLite
-Plotly
-```
+| Component         | Technology                              |
+| ----------------- | --------------------------------------- |
+| Language          | Python                                  |
+| UI                | Streamlit                               |
+| Agents            | Custom Python multi-agent orchestration |
+| Agent Concurrency | ThreadPoolExecutor                      |
+| Local LLM         | Ollama + Mistral                        |
+| Vision Model      | LLaVA + Ollama                          |
+| Cloud LLM         | OpenRouter                              |
+| RAG               | FAISS                                   |
+| Embeddings        | Hugging Face / SentenceTransformers     |
+| Guardrails        | Custom schema validation + retry        |
+| Scoring           | Custom weighted scoring engine          |
+| MLOps             | SQLite                                  |
+| Analytics         | Plotly + Streamlit                      |
 
----
+# Local Setup
 
-# Running Locally
-
-## Clone
+## 1. Clone the repository
 
 ```bash
 git clone https://github.com/anishsharma251205-bit/Archlens-multi-agent-system-architecture-evaluator-.git
@@ -528,69 +445,79 @@ git clone https://github.com/anishsharma251205-bit/Archlens-multi-agent-system-a
 cd Archlens-multi-agent-system-architecture-evaluator-
 ```
 
-## Create virtual environment
+## 2. Create a virtual environment
+
+```bash
+python -m venv venv
+```
+
+Activate it:
 
 ### Windows
 
 ```bash
-python -m venv venv
 venv\Scripts\activate
 ```
 
 ### Linux / macOS
 
 ```bash
-python3 -m venv venv
 source venv/bin/activate
 ```
 
-## Install dependencies
+## 3. Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## Configure environment
+## 4. Configure environment variables
 
-Copy `.env.example` to `.env` and add the required API configuration.
+Create a `.env` file based on `.env.example`.
 
-Do not commit `.env`.
+Configure the required OpenRouter settings if cloud inference is being used.
 
-## Run
+## 5. Install Ollama
+
+Install Ollama and pull the models used locally.
+
+For example:
+
+```bash
+ollama pull mistral
+ollama pull llava
+```
+
+The exact model configuration can be controlled through the project's environment/model configuration.
+
+## 6. Run ArchLens
 
 ```bash
 streamlit run app.py
 ```
 
-Ollama should be running locally when using local model inference.
-
----
-
 # Current Implementation
 
 ArchLens currently includes:
 
-* Five specialized architecture evaluation agents
+* Multi-agent architecture evaluation
+* Five specialized evaluation agents
 * Concurrent agent execution
-* Complexity-based model routing
-* Ollama local inference
-* OpenRouter integration
-* Model fallback
-* FAISS-based retrieval
+* RAG with FAISS
 * Hugging Face embeddings
-* Structured output validation
-* Guardrail retries
-* Weighted scoring
-* SQLite MLOps tracking
-* Agent-level logging
-* Streamlit analytics
-
----
+* Local Mistral inference through Ollama
+* LLaVA-based image/diagram evaluation through Ollama
+* OpenRouter cloud inference
+* Model fallback and retry mechanisms
+* Structured LLM output validation
+* Guardrails
+* Weighted architecture scoring
+* SQLite-based MLOps tracking
+* Streamlit analytics dashboard
+* Plotly visualizations
+* Evaluation history tracking
 
 # Author
 
-## Anish Sharma
+**Anish Sharma**
 
-B.Tech Computer Science Engineering
-
-GitHub: `anishsharma251205-bit`
