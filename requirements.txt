@@ -42,4 +42,4 @@ httpx>=0.27.0
 jsonschema>=4.20.0
 jsonpath-python>=1.0.0
 rich>=13.0.0
-
+torchvision
