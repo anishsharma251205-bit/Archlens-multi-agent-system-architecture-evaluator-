@@ -13,6 +13,10 @@ openrouter>=1.1.108
 # Local model / Ollama
 ollama>=0.4.0
 
+# Vision / Transformers dependencies
+torch
+torchvision
+
 # RAG / Embeddings
 faiss-cpu>=1.8.0
 sentence-transformers>=3.0.0
@@ -42,4 +46,4 @@ httpx>=0.27.0
 jsonschema>=4.20.0
 jsonpath-python>=1.0.0
 rich>=13.0.0
-torchvision
+
