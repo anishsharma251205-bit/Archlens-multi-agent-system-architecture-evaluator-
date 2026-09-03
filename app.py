@@ -1,25 +1,22 @@
-
 import sys
 import os
 import random
 import re
 import html
+import json
 from datetime import datetime
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import streamlit as st
 import plotly.graph_objects as go
-
 from agents.orchestrator import evaluate
 from core.scoring import get_score_label
 from core.llm_client import describe_diagram
 from fpdf import FPDF
 
 
-# ============================================================
 # PAGE CONFIG
-# ============================================================
 
 st.set_page_config(
     page_title="ArchLens",
@@ -28,23 +25,18 @@ st.set_page_config(
 )
 
 
-# ============================================================
 # HTML HELPER
-# ============================================================
 
 def render_html(content: str):
     """Render custom HTML directly."""
     st.html(content)
 
 
-# ============================================================
 # GLOBAL CSS
-# ============================================================
 
 st.markdown(
     """
     <style>
-
     @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600&family=Space+Mono:wght@400;700&display=swap');
 
     html, body, [class*="css"] {
@@ -64,7 +56,6 @@ st.markdown(
     }
 
     /* Cosmic background */
-
     .cosmic-bg {
         position: fixed;
         top: 0;
@@ -77,7 +68,6 @@ st.markdown(
     }
 
     /* Stars */
-
     .star {
         position: absolute;
         color: rgba(255,255,255,0.6);
@@ -99,7 +89,6 @@ st.markdown(
     }
 
     /* Comets */
-
     .comet {
         position: absolute;
         width: 2px;
@@ -149,7 +138,6 @@ st.markdown(
     }
 
     /* Astronomical images */
-
     .cs-photo-circle {
         position: absolute;
         border-radius: 50%;
@@ -181,7 +169,6 @@ st.markdown(
     }
 
     /* Glow */
-
     .cs-glow-warm {
         position: absolute;
         border-radius: 50%;
@@ -195,7 +182,6 @@ st.markdown(
     }
 
     /* Nebula */
-
     .nebula-cloud {
         position: absolute;
         border-radius: 50%;
@@ -216,7 +202,6 @@ st.markdown(
     }
 
     /* Credits */
-
     .cs-credit {
         position: fixed;
         bottom: 8px;
@@ -229,7 +214,6 @@ st.markdown(
     }
 
     /* Header */
-
     .space-header {
         text-align: center;
         padding: 3.5rem 0 2.5rem;
@@ -278,7 +262,6 @@ st.markdown(
     }
 
     /* Navigation */
-
     .nav-track {
         font-family: 'Space Mono', monospace;
         font-size: 10px;
@@ -290,7 +273,6 @@ st.markdown(
     }
 
     /* Tabs */
-
     .stTabs [data-baseweb="tab-list"] {
         background: transparent !important;
         border-bottom: 1px solid rgba(255,255,255,0.08) !important;
@@ -315,7 +297,6 @@ st.markdown(
     }
 
     /* Text area */
-
     .stTextArea textarea {
         background: rgba(255,255,255,0.02) !important;
         border: 1px solid rgba(255,255,255,0.12) !important;
@@ -336,7 +317,6 @@ st.markdown(
     }
 
     /* Buttons */
-
     .stButton > button {
         background: transparent !important;
         color: #ffffff !important;
@@ -362,7 +342,6 @@ st.markdown(
     }
 
     /* File uploader */
-
     div[data-testid="stFileUploader"] {
         background: rgba(255,255,255,0.02) !important;
         border: 1px dashed rgba(255,255,255,0.12) !important;
@@ -370,7 +349,6 @@ st.markdown(
     }
 
     /* Score card */
-
     .score-card {
         border: 1px solid rgba(255,255,255,0.12);
         padding: 2rem;
@@ -439,7 +417,6 @@ st.markdown(
     }
 
     /* Dimension rows */
-
     .dim-row {
         border: 1px solid rgba(255,255,255,0.06);
         padding: 10px 14px;
@@ -479,7 +456,6 @@ st.markdown(
     }
 
     /* Section label */
-
     .section-label {
         font-family: 'Space Mono', monospace;
         font-size: 10px;
@@ -492,7 +468,6 @@ st.markdown(
     }
 
     /* Report */
-
     .report-block {
         border: 1px solid rgba(255,255,255,0.06);
         padding: 1.5rem 2rem;
@@ -514,6 +489,10 @@ st.markdown(
         font-size: 11px;
     }
 
+    .report-block h2 {
+        margin-top: 0;
+    }
+
     .report-block strong {
         color: rgba(255,255,255,0.8);
     }
@@ -527,8 +506,72 @@ st.markdown(
         margin-bottom: 4px;
     }
 
-    /* Issue cards */
+    .report-score {
+        font-family: 'Space Mono', monospace;
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: #ffffff;
+        margin: 0.5rem 0 1rem;
+    }
 
+    /* Report breakdown */
+    .report-dimension {
+        border: 1px solid rgba(255,255,255,0.08);
+        margin: 1rem 0;
+        padding: 1.25rem 1.5rem;
+        background: rgba(255,255,255,0.015);
+    }
+
+    .report-dimension-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+        padding-bottom: 0.8rem;
+        margin-bottom: 1rem;
+    }
+
+    .report-dimension-name {
+        font-family: 'Space Mono', monospace;
+        font-size: 12px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: rgba(255,255,255,0.75);
+    }
+
+    .report-dimension-score {
+        font-family: 'Space Mono', monospace;
+        font-size: 14px;
+        color: #ffffff;
+    }
+
+    .report-dimension-summary {
+        font-size: 13px;
+        line-height: 1.8;
+        color: rgba(255,255,255,0.45);
+        margin-bottom: 1rem;
+    }
+
+    .report-subheading {
+        font-family: 'Space Mono', monospace;
+        font-size: 10px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: rgba(255,255,255,0.3);
+        margin: 1rem 0 0.5rem;
+    }
+
+    .report-dimension ul {
+        margin-top: 0.4rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .report-dimension li {
+        color: rgba(255,255,255,0.5);
+        margin-bottom: 5px;
+    }
+
+    /* Issue cards */
     .issue-card {
         border-left: 1px solid rgba(255,255,255,0.15);
         padding: 10px 14px;
@@ -574,7 +617,6 @@ st.markdown(
     }
 
     /* Metrics */
-
     div[data-testid="stMetric"] {
         background: rgba(255,255,255,0.02) !important;
         border: 1px solid rgba(255,255,255,0.06) !important;
@@ -594,7 +636,6 @@ st.markdown(
     }
 
     /* Download button */
-
     .stDownloadButton > button {
         background: transparent !important;
         color: rgba(255,255,255,0.5) !important;
@@ -613,7 +654,6 @@ st.markdown(
     }
 
     /* Spinner */
-
     .stSpinner > div {
         border-top-color: rgba(255,255,255,0.4) !important;
     }
@@ -623,7 +663,6 @@ st.markdown(
     }
 
     /* Expander */
-
     details {
         border: 1px solid rgba(255,255,255,0.06) !important;
         background: rgba(255,255,255,0.01) !important;
@@ -637,7 +676,6 @@ st.markdown(
     }
 
     /* Progress */
-
     .stProgress > div > div {
         background: rgba(255,255,255,0.12) !important;
     }
@@ -647,7 +685,6 @@ st.markdown(
     }
 
     /* Info */
-
     div[data-testid="stInfo"] {
         background: rgba(255,255,255,0.03) !important;
         border: 1px solid rgba(255,255,255,0.08) !important;
@@ -661,9 +698,7 @@ st.markdown(
 )
 
 
-# ============================================================
 # PAGE REGISTRY
-# ============================================================
 
 PAGE_NAMES = [
     "Overview",
@@ -680,9 +715,7 @@ PAGE_ICONS = [
 ]
 
 
-# ============================================================
 # ASTRONOMICAL BACKGROUNDS
-# ============================================================
 
 JUPITER_URL = (
     "https://d2pn8kiwq2w21t.cloudfront.net/"
@@ -700,9 +733,7 @@ PAGE_CREDITS = [
 ]
 
 
-# ============================================================
 # BACKGROUND RENDERERS
-# ============================================================
 
 def render_starfield():
     """Overview page: twinkling stars + Jupiter."""
@@ -852,12 +883,16 @@ BACKGROUND_RENDERERS = [
 ]
 
 
-# ============================================================
 # HELPERS
-# ============================================================
 
 def clean_text(text: str) -> str:
     """Convert report text into PDF-safe ASCII."""
+
+    if isinstance(text, dict):
+        text = format_report_text(text)
+
+    if not isinstance(text, str):
+        text = str(text)
 
     replacements = {
         "\u2013": "-",
@@ -873,12 +908,58 @@ def clean_text(text: str) -> str:
     for ch, replacement in replacements.items():
         text = text.replace(ch, replacement)
 
-    text = re.sub(r"[#\\*`]", "", text)
+    text = re.sub(r"[#\\\*\`]", "", text)
 
     return "".join(
         c if ord(c) < 128 else "?"
         for c in text
     )
+
+
+def format_report_text(report) -> str:
+    """Convert the structured final report into readable plain text."""
+
+    if isinstance(report, str):
+        return report
+
+    if not isinstance(report, dict):
+        return str(report)
+
+    lines = []
+
+    score = report.get("score")
+
+    if score is not None:
+        lines.append("Overall Evaluation")
+        lines.append(f"Score: {score}/10")
+        lines.append("")
+
+    summary = report.get("summary")
+
+    if summary:
+        lines.append("Summary")
+        lines.append(str(summary))
+        lines.append("")
+
+    issues = report.get("issues", [])
+
+    if issues:
+        lines.append("Key Issues")
+
+        for issue in issues:
+            lines.append(f"- {issue}")
+
+        lines.append("")
+
+    recommendations = report.get("recommendations", [])
+
+    if recommendations:
+        lines.append("Recommendations")
+
+        for recommendation in recommendations:
+            lines.append(f"- {recommendation}")
+
+    return "\n".join(lines)
 
 
 def safe_cell(pdf, text):
@@ -1090,14 +1171,19 @@ def generate_pdf(result) -> bytes:
         60,
     )
 
-    for line in clean_text(
+    report_text = format_report_text(
         result.final_report
+    )
+
+    for line in clean_text(
+        report_text
     ).split("\n"):
 
         line = line.strip()
 
         if not line:
             pdf.ln(2)
+
         else:
             safe_cell(
                 pdf,
@@ -1161,9 +1247,7 @@ def generate_pdf(result) -> bytes:
     return bytes(pdf.output())
 
 
-# ============================================================
 # SESSION STATE
-# ============================================================
 
 if "stage" not in st.session_state:
     st.session_state.stage = "input"
@@ -1187,9 +1271,7 @@ def reset_to_input():
     st.rerun()
 
 
-# ============================================================
 # HEADER
-# ============================================================
 
 render_html(
     """
@@ -1214,9 +1296,7 @@ render_html(
 )
 
 
-# ============================================================
 # STAGE 1 — INPUT
-# ============================================================
 
 if st.session_state.stage == "input":
 
@@ -1232,6 +1312,7 @@ if st.session_state.stage == "input":
     system_description = None
 
     # Text input
+
     with tab1:
 
         text_input = st.text_area(
@@ -1255,6 +1336,7 @@ if st.session_state.stage == "input":
             system_description = text_input
 
     # Diagram input
+
     with tab2:
 
         uploaded_file = st.file_uploader(
@@ -1300,6 +1382,7 @@ if st.session_state.stage == "input":
                 system_description = description
 
     # Run evaluation
+
     if system_description:
 
         with st.spinner(
@@ -1329,9 +1412,7 @@ if st.session_state.stage == "input":
         st.rerun()
 
 
-# ============================================================
 # STAGE 2 — RESULTS
-# ============================================================
 
 else:
 
@@ -1346,6 +1427,7 @@ else:
     page = st.session_state.page
 
     # Background
+
     BACKGROUND_RENDERERS[page]()
 
     if page < len(PAGE_CREDITS):
@@ -1359,6 +1441,7 @@ else:
         )
 
     # Page indicator
+
     render_html(
         f'<div class="nav-track">'
         f'page {page + 1} / {len(PAGE_NAMES)}'
@@ -1366,6 +1449,7 @@ else:
     )
 
     # Top navigation
+
     nav_cols = st.columns(
         len(PAGE_NAMES)
     )
@@ -1380,15 +1464,12 @@ else:
                 disabled=(i == page),
                 width="stretch",
             ):
-
                 go_to_page(i)
 
     render_html("<br>")
 
 
-    # ========================================================
     # PAGE 0 — OVERVIEW
-    # ========================================================
 
     if page == 0:
 
@@ -1403,6 +1484,7 @@ else:
         )
 
         # Score
+
         with col1:
 
             safe_label = html.escape(
@@ -1478,6 +1560,7 @@ else:
                 )
 
         # Radar chart
+
         with col2:
 
             vals = [
@@ -1555,9 +1638,7 @@ else:
             )
 
 
-    # ========================================================
     # PAGE 1 — REPORT
-    # ========================================================
 
     elif page == 1:
 
@@ -1567,19 +1648,313 @@ else:
             '</div>'
         )
 
-        st.markdown(
-            f"""
-            <div class="report-block">
-                {result.final_report}
-            </div>
-            """,
-            unsafe_allow_html=True,
+        report = result.final_report
+
+        # final_report is returned by generate_report()
+        # as a JSON string, so convert it into a dictionary.
+
+        if isinstance(report, str):
+
+            try:
+
+                parsed_report = json.loads(
+                    report
+                )
+
+                if isinstance(
+                    parsed_report,
+                    dict
+                ):
+                    report = parsed_report
+
+            except (
+                json.JSONDecodeError,
+                TypeError,
+            ):
+                pass
+
+
+        # ---------------------------------------------------------
+        # OVERALL GENERATED REPORT
+        # ---------------------------------------------------------
+
+        if isinstance(report, dict):
+
+            score = report.get(
+                "score",
+                result.final_score,
+            )
+
+            summary = report.get(
+                "summary",
+                "",
+            )
+
+            issues = report.get(
+                "issues",
+                [],
+            )
+
+            recommendations = report.get(
+                "recommendations",
+                [],
+            )
+
+            safe_summary = html.escape(
+                str(summary)
+            )
+
+            issue_items = "".join(
+                f"<li>{html.escape(str(issue))}</li>"
+                for issue in issues
+            )
+
+            recommendation_items = "".join(
+                f"<li>{html.escape(str(rec))}</li>"
+                for rec in recommendations
+            )
+
+            try:
+
+                display_score = f"{float(score):.2f}"
+
+            except (
+                TypeError,
+                ValueError,
+            ):
+
+                display_score = html.escape(
+                    str(score)
+                )
+
+            render_html(
+                f"""
+                <div class="report-block">
+
+                    <h2>Overall Evaluation</h2>
+
+                    <div class="report-score">
+                        {display_score}/10
+                    </div>
+
+                    <h3>Summary</h3>
+
+                    <p>
+                        {safe_summary}
+                    </p>
+
+                    <h3>Key Issues</h3>
+
+                    <ul>
+                        {issue_items}
+                    </ul>
+
+                    <h3>Recommendations</h3>
+
+                    <ul>
+                        {recommendation_items}
+                    </ul>
+
+                </div>
+                """
+            )
+
+        # Fallback for plain-text reports
+
+        else:
+
+            safe_report = html.escape(
+                str(report)
+            ).replace(
+                "\n",
+                "<br>",
+            )
+
+            render_html(
+                f"""
+                <div class="report-block">
+                    {safe_report}
+                </div>
+                """
+            )
+
+
+        # ---------------------------------------------------------
+        # DETAILED BREAKDOWN INSIDE REPORT
+        # ---------------------------------------------------------
+
+        render_html(
+            '<div class="section-label">'
+            '🌌 &nbsp; detailed dimension breakdown'
+            '</div>'
         )
 
+        report_dimensions = [
+            ("Structure", result.structure),
+            ("Security", result.security),
+            ("Scalability", result.scalability),
+            ("Performance", result.performance),
+            ("Cost", result.cost),
+        ]
 
-    # ========================================================
+        for dimension_name, dim in report_dimensions:
+
+            safe_dimension_name = html.escape(
+                dimension_name
+            )
+
+            try:
+                dimension_score = f"{float(dim.score):.2f}"
+            except (
+                TypeError,
+                ValueError,
+            ):
+                dimension_score = html.escape(
+                    str(dim.score)
+                )
+
+            safe_dimension_summary = html.escape(
+                str(dim.summary)
+            )
+
+            # Issues
+
+            issue_items = ""
+
+            for issue in dim.issues:
+
+                sev = str(
+                    issue.severity.value
+                ).lower()
+
+                sc = sev_class(sev)
+
+                safe_sev = html.escape(
+                    sev
+                )
+
+                safe_title = html.escape(
+                    str(issue.title)
+                )
+
+                safe_desc = html.escape(
+                    str(issue.description)
+                )
+
+                issue_items += (
+                    f"""
+                    <li>
+                        <div class="issue-card">
+
+                            <div class="issue-sev {sc}">
+                                ✦ &nbsp; {safe_sev}
+                            </div>
+
+                            <div class="issue-title">
+                                {safe_title}
+                            </div>
+
+                            <div class="issue-desc">
+                                {safe_desc}
+                            </div>
+
+                        </div>
+                    </li>
+                    """
+                )
+
+            # Recommendations
+
+            recommendation_items = ""
+
+            for i, rec in enumerate(
+                dim.recommendations,
+                1,
+            ):
+
+                safe_rec = html.escape(
+                    str(rec)
+                )
+
+                recommendation_items += (
+                    f"""
+                    <li>
+                        <span style="
+                            font-family:Space Mono,monospace;
+                            color:rgba(255,255,255,0.2);
+                            font-size:11px;
+                        ">
+                            {i:02d} &nbsp;
+                        </span>
+                        {safe_rec}
+                    </li>
+                    """
+                )
+
+            # Build dimension block
+
+            issue_section = ""
+
+            if dim.issues:
+
+                issue_section = (
+                    f"""
+                    <div class="report-subheading">
+                        Key Issues
+                    </div>
+
+                    <ul>
+                        {issue_items}
+                    </ul>
+                    """
+                )
+
+            recommendation_section = ""
+
+            if dim.recommendations:
+
+                recommendation_section = (
+                    f"""
+                    <div class="report-subheading">
+                        Recommendations
+                    </div>
+
+                    <ul>
+                        {recommendation_items}
+                    </ul>
+                    """
+                )
+
+            render_html(
+                f"""
+                <div class="report-dimension">
+
+                    <div class="report-dimension-header">
+
+                        <span class="report-dimension-name">
+                            {safe_dimension_name}
+                        </span>
+
+                        <span class="report-dimension-score">
+                            {dimension_score} / 10
+                        </span>
+
+                    </div>
+
+                    <div class="report-dimension-summary">
+                        {safe_dimension_summary}
+                    </div>
+
+                    {issue_section}
+
+                    {recommendation_section}
+
+                </div>
+                """
+            )
+
+
     # PAGE 2 — BREAKDOWN
-    # ========================================================
 
     elif page == 2:
 
@@ -1634,6 +2009,7 @@ else:
                 )
 
                 # Issues
+
                 if dim.issues:
 
                     render_html(
@@ -1648,7 +2024,9 @@ else:
                             issue.severity.value
                         ).lower()
 
-                        sc = sev_class(sev)
+                        sc = sev_class(
+                            sev
+                        )
 
                         safe_sev = html.escape(
                             sev
@@ -1683,6 +2061,7 @@ else:
                         )
 
                 # Recommendations
+
                 if dim.recommendations:
 
                     render_html(
@@ -1724,9 +2103,7 @@ else:
                         )
 
 
-    # ========================================================
     # PAGE 3 — EXPORT
-    # ========================================================
 
     elif page == 3:
 
@@ -1752,9 +2129,7 @@ else:
         )
 
 
-    # ========================================================
     # BOTTOM NAVIGATION
-    # ========================================================
 
     render_html("<br>")
 
@@ -1799,4 +2174,3 @@ else:
                 go_to_page(
                     page + 1
                 )
-

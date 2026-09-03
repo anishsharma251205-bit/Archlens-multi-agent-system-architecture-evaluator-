@@ -1,4 +1,3 @@
-
 import os
 import json
 import time
@@ -9,10 +8,7 @@ from openai import OpenAI
 
 load_dotenv()
 
-
-# ============================================================
-# MODEL CONFIGURATION
-# ============================================================
+# Model configuration
 
 OLLAMA_MODEL = os.getenv(
     "OLLAMA_MODEL",
@@ -23,13 +19,13 @@ OPENROUTER_API_KEY = os.getenv(
     "OPENROUTER_API_KEY"
 )
 
-# Primary OpenRouter model
+# Text / agent models
+
 OPENROUTER_MODEL = os.getenv(
     "OPENROUTER_MODEL",
     "nvidia/nemotron-3-super-120b-a12b:free"
 )
 
-# Ordered fallback pool.
 OPENROUTER_FALLBACK_MODELS = [
     model.strip()
     for model in os.getenv(
@@ -40,7 +36,6 @@ OPENROUTER_FALLBACK_MODELS = [
     if model.strip()
 ]
 
-# Remove duplicates while preserving order.
 OPENROUTER_MODELS = []
 
 for model in [
@@ -50,13 +45,8 @@ for model in [
     if model and model not in OPENROUTER_MODELS:
         OPENROUTER_MODELS.append(model)
 
+# OpenRouter settings
 
-# ============================================================
-# OPENROUTER SETTINGS
-# ============================================================
-
-# Maximum time allowed for one OpenRouter request.
-# This prevents ArchLens from appearing frozen forever.
 OPENROUTER_TIMEOUT = float(
     os.getenv(
         "OPENROUTER_TIMEOUT",
@@ -64,7 +54,6 @@ OPENROUTER_TIMEOUT = float(
     )
 )
 
-# Number of attempts for transient provider errors.
 OPENROUTER_RETRIES = int(
     os.getenv(
         "OPENROUTER_RETRIES",
@@ -72,7 +61,6 @@ OPENROUTER_RETRIES = int(
     )
 )
 
-# Delay between retries.
 OPENROUTER_RETRY_DELAY = float(
     os.getenv(
         "OPENROUTER_RETRY_DELAY",
@@ -80,34 +68,27 @@ OPENROUTER_RETRY_DELAY = float(
     )
 )
 
-
-# ============================================================
-# OPENROUTER CLIENT
-# ============================================================
+# OpenRouter client
 
 openrouter_client = None
 
 if OPENROUTER_API_KEY:
-
     openrouter_client = OpenAI(
         base_url="https://openrouter.ai/api/v1",
         api_key=OPENROUTER_API_KEY,
         timeout=OPENROUTER_TIMEOUT,
     )
 
-
-# ============================================================
-# COMPLEXITY CLASSIFIER
-# ============================================================
+# Complexity classifier
 
 def classify_complexity(user_input: str) -> str:
     """
-    Classify architecture complexity using simple heuristics.
+    Classify architecture complexity.
 
     Returns:
-        'simple'
-        'medium'
-        'complex'
+        simple
+        medium
+        complex
     """
 
     if not user_input:
@@ -155,26 +136,16 @@ def classify_complexity(user_input: str) -> str:
     if word_count < 50 and keyword_count < 2:
         return "simple"
 
-    elif word_count < 150 and keyword_count < 5:
+    if word_count < 150 and keyword_count < 5:
         return "medium"
 
-    else:
-        return "complex"
+    return "complex"
 
-
-# ============================================================
-# JSON CLEANING
-# ============================================================
+# JSON cleaning
 
 def parse_json_response(raw: str):
     """
     Safely convert model output into JSON.
-
-    Handles:
-    - Markdown code fences
-    - Extra text before/after JSON
-    - JSON objects
-    - JSON arrays
     """
 
     if not raw:
@@ -184,34 +155,19 @@ def parse_json_response(raw: str):
 
     raw = raw.strip()
 
-    # --------------------------------------------------------
-    # Remove markdown code fences
-    # --------------------------------------------------------
-
     if raw.startswith("```"):
-
         parts = raw.split("```")
 
         if len(parts) >= 2:
-
             raw = parts[1].strip()
 
             if raw.lower().startswith("json"):
                 raw = raw[4:].strip()
 
-    # --------------------------------------------------------
-    # Try normal JSON first
-    # --------------------------------------------------------
-
     try:
         return json.loads(raw)
-
     except json.JSONDecodeError:
         pass
-
-    # --------------------------------------------------------
-    # Find JSON object or array inside surrounding text
-    # --------------------------------------------------------
 
     object_start = raw.find("{")
     array_start = raw.find("[")
@@ -247,26 +203,18 @@ def parse_json_response(raw: str):
             f"{raw[:1000]}"
         )
 
-    json_text = raw[
-        start:end + 1
-    ]
+    json_text = raw[start:end + 1]
 
     try:
-
         return json.loads(json_text)
-
     except json.JSONDecodeError as e:
-
         raise ValueError(
             "Invalid JSON returned by model:\n"
             f"{e}\n\n"
             f"Response:\n{raw[:1500]}"
         )
 
-
-# ============================================================
-# ARCHLENS OUTPUT VALIDATION
-# ============================================================
+# ArchLens output validation
 
 def validate_archlens_output(result):
     """
@@ -279,27 +227,16 @@ def validate_archlens_output(result):
             f"{type(result).__name__}"
         )
 
-    # --------------------------------------------------------
-    # DIMENSION
-    # --------------------------------------------------------
-
     if "dimension" in result:
-
         if not isinstance(
             result["dimension"],
             str
         ):
-
             raise ValueError(
                 "'dimension' must be a string"
             )
 
-    # --------------------------------------------------------
-    # SCORE
-    # --------------------------------------------------------
-
     if "score" not in result:
-
         raise ValueError(
             "ArchLens output missing 'score'"
         )
@@ -307,7 +244,6 @@ def validate_archlens_output(result):
     score = result["score"]
 
     if isinstance(score, bool):
-
         raise ValueError(
             "Score must be numeric, not boolean"
         )
@@ -316,23 +252,16 @@ def validate_archlens_output(result):
         score,
         (int, float)
     ):
-
         raise ValueError(
             f"Score must be numeric, got {score!r}"
         )
 
     if not 0 <= score <= 10:
-
         raise ValueError(
             f"Score must be between 0 and 10, got {score}"
         )
 
-    # --------------------------------------------------------
-    # ISSUES
-    # --------------------------------------------------------
-
     if "issues" not in result:
-
         raise ValueError(
             "ArchLens output missing 'issues'"
         )
@@ -341,37 +270,24 @@ def validate_archlens_output(result):
         result["issues"],
         list
     ):
-
         raise ValueError(
             "'issues' must be a list"
         )
 
-    # --------------------------------------------------------
-    # RECOMMENDATIONS
-    # --------------------------------------------------------
-
     if "recommendations" not in result:
-
         raise ValueError(
-            "ArchLens output missing "
-            "'recommendations'"
+            "ArchLens output missing 'recommendations'"
         )
 
     if not isinstance(
         result["recommendations"],
         list
     ):
-
         raise ValueError(
             "'recommendations' must be a list"
         )
 
-    # --------------------------------------------------------
-    # SUMMARY
-    # --------------------------------------------------------
-
     if "summary" not in result:
-
         raise ValueError(
             "ArchLens output missing 'summary'"
         )
@@ -382,44 +298,31 @@ def validate_archlens_output(result):
         summary,
         str
     ):
-
         raise ValueError(
             "'summary' must be a string"
         )
 
     if len(summary.strip()) < 20:
-
         raise ValueError(
             "'summary' is too short"
         )
-
-    # --------------------------------------------------------
-    # At least one useful finding
-    # --------------------------------------------------------
 
     if (
         not result["issues"]
         and not result["recommendations"]
     ):
-
         raise ValueError(
             "ArchLens output contains no issues "
             "and no recommendations"
         )
 
-    # --------------------------------------------------------
-    # Validate issue objects
-    # --------------------------------------------------------
-
     for index, issue in enumerate(
         result["issues"]
     ):
-
         if not isinstance(
             issue,
             dict
         ):
-
             raise ValueError(
                 f"Issue {index} must be an object"
             )
@@ -431,12 +334,9 @@ def validate_archlens_output(result):
         ]
 
         for field in required_fields:
-
             if field not in issue:
-
                 raise ValueError(
-                    f"Issue {index} missing "
-                    f"'{field}'"
+                    f"Issue {index} missing '{field}'"
                 )
 
         severity = str(
@@ -451,60 +351,48 @@ def validate_archlens_output(result):
         }
 
         if severity not in valid_severities:
-
             raise ValueError(
                 f"Issue {index} has invalid "
                 f"severity '{issue['severity']}'"
             )
 
-    # --------------------------------------------------------
-    # Validate recommendations
-    # --------------------------------------------------------
-
     for index, recommendation in enumerate(
         result["recommendations"]
     ):
-
         if not isinstance(
             recommendation,
             str
         ):
-
             raise ValueError(
-                f"Recommendation {index} "
-                f"must be a string"
+                f"Recommendation {index} must be a string"
             )
 
         if not recommendation.strip():
-
             raise ValueError(
-                f"Recommendation {index} "
-                f"is empty"
+                f"Recommendation {index} is empty"
             )
 
     return True
 
-
-# ============================================================
-# OLLAMA / MISTRAL
-# ============================================================
+# Ollama / Mistral
 
 def call_ollama(
     system_prompt: str,
     user_input: str,
     expect_json: bool = True
 ):
+    """
+    Call the local Ollama text model.
+    """
 
-    """
-    Call local Ollama model.
-    """
+    print(
+        f"[ArchLens] Using Ollama TEXT model: {OLLAMA_MODEL}"
+    )
 
     full_prompt = f"""
 {system_prompt}
 
-============================================================
 ARCHLENS AGENT OUTPUT RULES
-============================================================
 
 You are ONE specialized ArchLens evaluation agent.
 
@@ -524,12 +412,12 @@ IMPORTANT RULES:
 9. Do NOT use Markdown code fences.
 10. Do NOT invent technologies that are not present.
 11. Base your evaluation only on the provided architecture.
-12. The entire response must be valid JSON.
-13. Stop generating immediately after the closing curly brace.
+12. Do not assume an unspecified feature is absent.
+13. Distinguish PRESENT, ABSENT, and UNSPECIFIED.
+14. The entire response must be valid JSON.
+15. Stop generating immediately after the closing curly brace.
 
-============================================================
 REQUIRED JSON FORMAT
-============================================================
 
 {{
   "dimension": "requested_dimension",
@@ -546,8 +434,6 @@ REQUIRED JSON FORMAT
   ],
   "summary": "Meaningful summary of this dimension"
 }}
-
-============================================================
 
 Architecture/Input:
 
@@ -567,11 +453,7 @@ Architecture/Input:
         }
     )
 
-    raw = response[
-        "message"
-    ][
-        "content"
-    ].strip()
+    raw = response["message"]["content"].strip()
 
     if not expect_json:
         return raw
@@ -582,10 +464,7 @@ Architecture/Input:
 
     return result
 
-
-# ============================================================
-# OPENROUTER - SINGLE MODEL
-# ============================================================
+# OpenRouter single model
 
 def _call_openrouter_model(
     model: str,
@@ -593,12 +472,8 @@ def _call_openrouter_model(
     user_input: str,
     expect_json: bool = True
 ):
-
     """
-    Call one specific OpenRouter model.
-
-    Includes timeout protection so a provider cannot
-    block ArchLens indefinitely.
+    Call one specific OpenRouter TEXT model.
     """
 
     full_prompt = f"""
@@ -610,6 +485,8 @@ IMPORTANT:
 - Do not invent technologies that are not present.
 - Base recommendations on the provided architecture.
 - Do not assume components that were not provided.
+- Do not treat unspecified features as absent.
+- Distinguish PRESENT, ABSENT, and UNSPECIFIED.
 - Evaluate ONLY the requested dimension.
 - Return exactly ONE JSON object.
 - Do not return multiple JSON objects.
@@ -634,7 +511,7 @@ Architecture/Input:
 """
 
     print(
-        f"[ArchLens] Trying OpenRouter model: {model}"
+        f"[ArchLens] Trying OpenRouter TEXT model: {model}"
     )
 
     response = openrouter_client.chat.completions.create(
@@ -654,7 +531,6 @@ Architecture/Input:
     )
 
     if not response.choices:
-
         raise ValueError(
             "OpenRouter returned no choices."
         )
@@ -662,7 +538,6 @@ Architecture/Input:
     message = response.choices[0].message
 
     if not message.content:
-
         raise ValueError(
             "OpenRouter returned an empty response."
         )
@@ -679,12 +554,11 @@ Architecture/Input:
         actual_model = model
 
     print(
-        f"[ArchLens] OpenRouter model used: "
+        f"[ArchLens] OpenRouter TEXT model used: "
         f"{actual_model}"
     )
 
     if not expect_json:
-
         return raw, actual_model
 
     result = parse_json_response(raw)
@@ -693,22 +567,15 @@ Architecture/Input:
 
     return result, actual_model
 
-
-# ============================================================
-# OPENROUTER - CONTROLLED MODEL POOL
-# ============================================================
+# OpenRouter text model pool
 
 def call_openrouter(
     system_prompt: str,
     user_input: str,
     expect_json: bool = True
 ):
-
     """
-    Call OpenRouter using the configured model pool.
-
-    Transient errors such as rate limits and timeouts are
-    retried with a short backoff.
+    Call OpenRouter using the TEXT model pool.
 
     Returns:
         result,
@@ -716,22 +583,28 @@ def call_openrouter(
     """
 
     if not openrouter_client:
-
         raise RuntimeError(
             "OPENROUTER_API_KEY is not configured."
         )
 
+    if not OPENROUTER_MODELS:
+        raise RuntimeError(
+            "No OpenRouter TEXT models are configured."
+        )
+
     errors = []
 
-    for model in OPENROUTER_MODELS:
+    print(
+        f"[ArchLens] TEXT OpenRouter pool: "
+        f"{OPENROUTER_MODELS}"
+    )
 
-        model_succeeded = False
+    for model in OPENROUTER_MODELS:
 
         for attempt in range(
             1,
             OPENROUTER_RETRIES + 1
         ):
-
             try:
 
                 result, actual_model = (
@@ -744,7 +617,7 @@ def call_openrouter(
                 )
 
                 print(
-                    f"[ArchLens] OpenRouter accepted model: "
+                    f"[ArchLens] OpenRouter TEXT model accepted: "
                     f"{actual_model}"
                 )
 
@@ -766,13 +639,13 @@ def call_openrouter(
                 )
 
                 print(
-                    f"[ArchLens] OpenRouter model failed: "
+                    f"[ArchLens] OpenRouter TEXT model failed: "
                     f"{model}"
                 )
 
                 print(
-                    f"[ArchLens] Attempt {attempt}/"
-                    f"{OPENROUTER_RETRIES}"
+                    f"[ArchLens] Attempt "
+                    f"{attempt}/{OPENROUTER_RETRIES}"
                 )
 
                 print(
@@ -780,38 +653,21 @@ def call_openrouter(
                     f"{error_message}"
                 )
 
-                # ------------------------------------------------
-                # Wait before retrying the same model.
-                # ------------------------------------------------
-
                 if attempt < OPENROUTER_RETRIES:
-
                     time.sleep(
                         OPENROUTER_RETRY_DELAY * attempt
                     )
 
-                else:
-
-                    model_succeeded = False
-
-        if not model_succeeded:
-            print(
-                f"[ArchLens] Moving to next OpenRouter model."
-            )
-
-    # --------------------------------------------------------
-    # All OpenRouter models failed.
-    # --------------------------------------------------------
+        print(
+            "[ArchLens] Moving to next OpenRouter TEXT model."
+        )
 
     raise RuntimeError(
-        "All configured OpenRouter models failed.\n"
+        "All configured OpenRouter TEXT models failed.\n"
         + "\n".join(errors)
     )
 
-
-# ============================================================
-# MAIN ROUTER
-# ============================================================
+# Main text router
 
 def route(
     system_prompt: str,
@@ -819,26 +675,16 @@ def route(
     expect_json: bool = True,
     mlops_tracker=None
 ):
-
     """
-    Intelligent model router.
+    Intelligent TEXT model router.
 
-    Routing:
+    SIMPLE / MEDIUM:
+        Ollama -> OpenRouter TEXT pool
 
-        SIMPLE  -> Ollama/Mistral
-        MEDIUM  -> Ollama/Mistral
-        COMPLEX -> OpenRouter model pool
-
-    Fallback:
-
-        Simple/Medium:
-            Ollama -> OpenRouter
-
-        Complex:
-            OpenRouter -> Ollama
+    COMPLEX:
+        OpenRouter TEXT pool -> Ollama
 
     Returns:
-
         result,
         model_used,
         complexity
@@ -848,16 +694,29 @@ def route(
         user_input
     )
 
+    print(
+        f"[ArchLens] TEXT routing — complexity: "
+        f"{complexity}"
+    )
+
+    print(
+        f"[ArchLens] TEXT OpenRouter pool: "
+        f"{OPENROUTER_MODELS}"
+    )
+
     start = time.time()
 
-    # ========================================================
-    # SIMPLE / MEDIUM
-    # ========================================================
+    # Simple / medium text input
 
     if complexity in (
         "simple",
         "medium"
     ):
+
+        print(
+            "[ArchLens] Simple/Medium TEXT input "
+            "-> Ollama first"
+        )
 
         try:
 
@@ -870,7 +729,6 @@ def route(
             latency = time.time() - start
 
             if mlops_tracker:
-
                 mlops_tracker.log(
                     model=OLLAMA_MODEL,
                     complexity=complexity,
@@ -887,17 +745,18 @@ def route(
         except Exception as ollama_error:
 
             print(
-                f"[ArchLens] Ollama failed: "
+                f"[ArchLens] Ollama TEXT failed: "
                 f"{ollama_error}"
             )
-
-            # ------------------------------------------------
-            # Ollama failed -> OpenRouter
-            # ------------------------------------------------
 
             if openrouter_client:
 
                 try:
+
+                    print(
+                        "[ArchLens] Ollama failed "
+                        "-> OpenRouter TEXT fallback"
+                    )
 
                     result, actual_model = (
                         call_openrouter(
@@ -912,7 +771,6 @@ def route(
                     )
 
                     if mlops_tracker:
-
                         mlops_tracker.log(
                             model=model_name,
                             complexity=complexity,
@@ -929,13 +787,11 @@ def route(
                 except Exception as openrouter_error:
 
                     print(
-                        f"[ArchLens] OpenRouter "
-                        f"fallback failed: "
-                        f"{openrouter_error}"
+                        "[ArchLens] OpenRouter TEXT "
+                        f"fallback failed: {openrouter_error}"
                     )
 
             if mlops_tracker:
-
                 mlops_tracker.log(
                     model=OLLAMA_MODEL,
                     complexity=complexity,
@@ -945,11 +801,14 @@ def route(
 
             raise ollama_error
 
-    # ========================================================
-    # COMPLEX -> OPENROUTER
-    # ========================================================
+    # Complex text input
 
     if complexity == "complex":
+
+        print(
+            "[ArchLens] Complex TEXT input "
+            "-> OpenRouter TEXT pool"
+        )
 
         openrouter_error = None
 
@@ -972,7 +831,6 @@ def route(
                 latency = time.time() - start
 
                 if mlops_tracker:
-
                     mlops_tracker.log(
                         model=model_name,
                         complexity=complexity,
@@ -991,7 +849,7 @@ def route(
                 openrouter_error = e
 
                 print(
-                    f"[ArchLens] OpenRouter pool failed: "
+                    f"[ArchLens] OpenRouter TEXT pool failed: "
                     f"{e}"
                 )
 
@@ -1001,9 +859,9 @@ def route(
                 "OpenRouter client unavailable"
             )
 
-        # ====================================================
-        # FALLBACK -> OLLAMA
-        # ====================================================
+        print(
+            "[ArchLens] Falling back to Ollama TEXT model"
+        )
 
         try:
 
@@ -1016,7 +874,6 @@ def route(
             latency = time.time() - start
 
             if mlops_tracker:
-
                 mlops_tracker.log(
                     model=f"{OLLAMA_MODEL}:fallback",
                     complexity=complexity,
@@ -1033,7 +890,6 @@ def route(
         except Exception as ollama_error:
 
             if mlops_tracker:
-
                 mlops_tracker.log(
                     model=OLLAMA_MODEL,
                     complexity=complexity,
@@ -1042,17 +898,12 @@ def route(
                 )
 
             raise RuntimeError(
-                "Both OpenRouter and Ollama failed.\n"
-                f"OpenRouter error: "
-                f"{openrouter_error}\n"
-                f"Ollama error: "
-                f"{ollama_error}"
+                "Both OpenRouter TEXT and Ollama failed.\n"
+                f"OpenRouter error: {openrouter_error}\n"
+                f"Ollama error: {ollama_error}"
             )
 
-
-# ============================================================
-# TEST
-# ============================================================
+# Local test
 
 if __name__ == "__main__":
 
@@ -1091,15 +942,13 @@ if __name__ == "__main__":
     )
 
     print(
-        "\nConfigured OpenRouter models:"
+        "\nConfigured OpenRouter TEXT models:"
     )
 
     for index, model in enumerate(
         OPENROUTER_MODELS,
         start=1
     ):
-
         print(
             f"{index}. {model}"
         )
-
