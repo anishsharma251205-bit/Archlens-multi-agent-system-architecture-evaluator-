@@ -8,7 +8,7 @@ ArchLens is a multi-agent AI system that evaluates software architectures across
 - Performance
 - Cost
 
-It supports both **text-based architecture evaluation** and **diagram/image-based evaluation** using a dedicated LLaVA vision pipeline.
+It supports both **text-based architecture evaluation** and **diagram/image-based evaluation** using a dedicated vision pipeline (local LLaVA, or an OpenRouter vision model pool with fallback for cloud deployment).
 
 The goal is to turn an architecture description or diagram into a structured engineering review with scores, issues, recommendations, and an overall architecture score.
 
@@ -33,7 +33,7 @@ ArchLens automates this review by splitting the evaluation into multiple special
 ```mermaid
 flowchart TD
     A[Text Input] --> B[Complexity Classification]
-    T[Architecture Diagram] --> V[LLaVA Vision Pipeline]
+    T[Architecture Diagram] --> V[Vision Pipeline]
     V --> B
 
     B --> C[Agent Orchestrator]
@@ -93,7 +93,7 @@ For diagram-based input:
 Architecture Diagram
     |
     v
-LLaVA Vision Pipeline
+Vision Pipeline
     |
     v
 Architecture Information
@@ -135,13 +135,13 @@ Configured Cloud Model
 
 Fallback mechanisms are available when a selected model fails.
 
-### 3. Vision and Diagram Processing (LLaVA)
+### 3. Vision and Diagram Processing (LLaVA + OpenRouter Vision Pool)
 
-ArchLens includes a dedicated vision pipeline for architecture diagrams, built around **LLaVA**.
+ArchLens includes a dedicated vision pipeline for architecture diagrams. It supports both a local multimodal model (**LLaVA**) and a cloud pool of vision models through **OpenRouter**.
 
-The vision pipeline is kept separate from the text-agent routing system because diagram understanding requires a multimodal model, while the five engineering agents primarily perform text-based architecture reasoning.
+The vision pipeline is kept separate from the text-agent routing system because diagram understanding requires a multimodal model, while the five engineering agents primarily perform text-based architecture reasoning. Both vision paths are responsible only for interpreting the visual architecture and converting the diagram into architecture information — the actual engineering evaluation still happens downstream in the five specialized agents.
 
-Currently, LLaVA runs locally through **Ollama** and is responsible for converting a diagram into a written architecture description that the rest of the pipeline can consume:
+**Local: LLaVA through Ollama**
 
 ```text
 Architecture Diagram
@@ -162,9 +162,68 @@ Architecture Description
 Five-Agent Evaluation
 ```
 
-LLaVA is responsible only for interpreting the visual architecture and converting the diagram into architecture information. It does not perform the engineering evaluation itself — that is handled downstream by the five specialized agents.
+**Cloud: OpenRouter Vision Pool**
 
-The local LLaVA setup is intended primarily for development and local execution, and can later be swapped for a hosted/cloud vision model without changing how the rest of the pipeline (complexity classification, agents, scoring) works, since everything downstream always receives the same intermediate "architecture description" text regardless of source.
+For cloud deployment, ArchLens uses a dedicated OpenRouter vision-model pool, intentionally kept separate from the text/agent model pool so vision models can be configured, monitored, and replaced independently.
+
+```text
+Architecture Diagram
+        |
+        v
+Dedicated Vision Router
+        |
+        v
+OpenRouter Vision Model Pool
+        |
+        v
+Architecture Description
+        |
+        v
+Five-Agent Evaluation
+```
+
+**Vision Model Fallback**
+
+Just like the text-agent router, the vision router attempts its configured models sequentially and falls back on failure:
+
+```text
+Architecture Diagram
+        |
+        v
+Vision Model 1
+        |
+        +---- Success ----> Architecture Description
+        |
+        +---- Failure
+                |
+                v
+        Vision Model 2
+                |
+                +---- Success ----> Architecture Description
+                |
+                +---- Failure
+                        |
+                        v
+                Vision Model 3
+                        |
+                        v
+                     Success
+                        |
+                        v
+              Architecture Description
+```
+
+This provides resilience against:
+
+- Provider rate limits
+- Temporary provider failures
+- API errors
+- Model availability issues
+- Failed vision requests
+
+During testing, the first two configured OpenRouter vision models returned upstream 429 rate-limit responses. ArchLens automatically moved to the next configured vision model, and the third vision model successfully processed the architecture diagram — allowing the evaluation to continue even when an individual vision provider or model is temporarily unavailable.
+
+The local LLaVA setup is generally used for development and local execution, while the OpenRouter vision pool with fallback is used for cloud deployment. Either path feeds the same downstream pipeline (complexity classification, agents, scoring), since everything downstream always receives the same intermediate "architecture description" text regardless of source.
 
 ### 4. Text and Vision Model Routing
 
@@ -197,8 +256,9 @@ Architecture Diagram
        v
 Vision Model Router
        |
-       v
-Ollama + LLaVA
+       +---- Local ----> Ollama + LLaVA
+       |
+       +---- Cloud ----> OpenRouter Vision Pool (with fallback chain)
        |
        v
 Architecture Description
@@ -207,7 +267,7 @@ Architecture Description
 Text Evaluation Pipeline
 ```
 
-This separation means the LLaVA/vision path can be developed, monitored, and upgraded (e.g. moved to a hosted vision model) independently of the Mistral/OpenRouter text-agent routing.
+This separation means the vision path (LLaVA locally, or the OpenRouter vision pool with its own fallback chain in the cloud) can be developed, monitored, and upgraded independently of the Mistral/OpenRouter text-agent routing.
 
 ### 5. Five Specialized Agents
 
@@ -341,14 +401,15 @@ Ollama is used for local inference. Current local models include:
 
 **OpenRouter**
 
-OpenRouter is used for cloud-based model inference for more complex text evaluations.
+OpenRouter is used for cloud-based model inference, both for more complex text evaluations and for cloud-based vision processing.
 
 The routing system supports:
 
 - Multiple OpenRouter text models
+- Multiple OpenRouter vision models
 - Retry logic
 - Request timeouts
-- Fallback models
+- Fallback models (separate fallback chains for text and vision)
 - Ollama fallback
 
 The actual model used during an evaluation is tracked by the MLOps system, for both the text agents and the vision step.
@@ -445,10 +506,7 @@ The complete image evaluation pipeline is:
 Architecture Diagram
         |
         v
-      LLaVA
-        |
-        v
-Ollama Local Inference
+   Vision Model
         |
         v
 Visual Architecture Understanding
@@ -469,7 +527,40 @@ Scoring
 Final Report
 ```
 
-LLaVA is responsible for visual understanding and converting a diagram into a text description; the five specialized agents are responsible for the actual engineering evaluation, using the same downstream pipeline as text input.
+For local execution:
+
+```text
+Architecture Diagram
+        |
+        v
+      LLaVA
+        |
+        v
+      Ollama
+        |
+        v
+Architecture Description
+```
+
+For cloud execution:
+
+```text
+Architecture Diagram
+        |
+        v
+Dedicated Vision Router
+        |
+        v
+OpenRouter Vision Model Pool
+        |
+        v
+Fallback Models
+        |
+        v
+Architecture Description
+```
+
+The vision model — whether local LLaVA or the OpenRouter vision pool — is responsible for visual understanding and converting a diagram into a text description; the five specialized agents are responsible for the actual engineering evaluation, using the same downstream pipeline as text input.
 
 ## Evaluation Report
 
@@ -648,8 +739,10 @@ Archlens-multi-agent-system-architecture-evaluator/
 | Agents | Custom Python multi-agent orchestration |
 | Agent Concurrency | ThreadPoolExecutor |
 | Local Text LLM | Ollama + Mistral |
-| Vision Model | LLaVA + Ollama |
+| Local Vision Model | LLaVA + Ollama |
 | Cloud Text LLM | OpenRouter |
+| Cloud Vision Models | OpenRouter Vision Model Pool |
+| Vision Routing | Dedicated Vision Router + Fallback Models |
 | RAG | FAISS |
 | Embeddings | Hugging Face / SentenceTransformers |
 | Guardrails | Custom Schema Validation + Retry |
@@ -697,14 +790,18 @@ pip install -r requirements.txt
 
 Create a `.env` file based on `.env.example`.
 
-Configure the required OpenRouter settings if cloud inference is being used for the text agents.
+Configure the required OpenRouter settings if cloud inference is being used, for both the text agents and the vision pipeline.
 
 Example:
 
 ```text
-# TEXT / AGENT MODEL
+# TEXT / AGENT MODELS
 OPENROUTER_MODEL=nvidia/nemotron-3-super-120b-a12b:free
 OPENROUTER_FALLBACK_MODELS=google/gemma-4-26b-a4b-it:free;z-ai/glm-5.2:free
+
+# VISION / DIAGRAM MODELS
+OPENROUTER_VISION_MODEL=google/gemma-4-26b-a4b-it:free
+OPENROUTER_VISION_FALLBACK_MODELS=google/gemma-4-31b-it:free;nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
 
 # ENVIRONMENT
 ARCHLENS_ENV=cloud
@@ -739,6 +836,9 @@ ArchLens currently includes:
 - Local Mistral inference through Ollama
 - Local LLaVA-based image and diagram evaluation through Ollama
 - Cloud OpenRouter inference for text agents
+- Dedicated OpenRouter vision-model routing
+- Separate text and vision model pools
+- Vision model fallback chains
 - Text model fallback chains
 - Retry and timeout mechanisms
 - Structured LLM output validation
@@ -760,7 +860,7 @@ Potential future improvements include:
 
 - More specialized architecture agents
 - Improved diagram understanding
-- Cloud/hosted vision model support alongside local LLaVA
+- More vision models in the OpenRouter pool
 - Better architecture component extraction
 - More advanced RAG retrieval
 - Historical architecture comparison
