@@ -32,9 +32,8 @@ ArchLens automates this review by splitting the evaluation into multiple special
 
 ```mermaid
 flowchart TD
-    A[Architecture Input] --> B[Complexity Classification]
-
-    A --> V[LLaVA Vision Pipeline]
+    A[Text Input] --> B[Complexity Classification]
+    T[Architecture Diagram] --> V[LLaVA Vision Pipeline]
     V --> B
 
     B --> C[Agent Orchestrator]
