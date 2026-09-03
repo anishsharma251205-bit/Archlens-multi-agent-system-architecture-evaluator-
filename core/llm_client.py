@@ -10,12 +10,17 @@ load_dotenv()
 
 # LOCAL MODEL
 
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "mistral")
+OLLAMA_MODEL = os.getenv(
+    "OLLAMA_MODEL",
+    "mistral",
+)
 
 
 # OPENROUTER CONFIGURATION
 
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+OPENROUTER_API_KEY = os.getenv(
+    "OPENROUTER_API_KEY",
+)
 
 OPENROUTER_VISION_MODEL = os.getenv(
     "OPENROUTER_VISION_MODEL",
@@ -26,8 +31,8 @@ OPENROUTER_VISION_FALLBACK_MODELS = [
     model.strip()
     for model in os.getenv(
         "OPENROUTER_VISION_FALLBACK_MODELS",
-        "google/gemma-4-31b:free;"
-        "nvidia/nemotron-3-nano-omni:free",
+        "google/gemma-4-31b-it:free;"
+        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
     ).split(";")
     if model.strip()
 ]
@@ -41,16 +46,28 @@ for model in [
     if model and model not in OPENROUTER_VISION_MODELS:
         OPENROUTER_VISION_MODELS.append(model)
 
+
+# VISION REQUEST SETTINGS
+
 OPENROUTER_VISION_TIMEOUT = float(
-    os.getenv("OPENROUTER_VISION_TIMEOUT", "60")
+    os.getenv(
+        "OPENROUTER_VISION_TIMEOUT",
+        "60",
+    )
 )
 
 OPENROUTER_VISION_RETRIES = int(
-    os.getenv("OPENROUTER_VISION_RETRIES", "1")
+    os.getenv(
+        "OPENROUTER_VISION_RETRIES",
+        "1",
+    )
 )
 
 OPENROUTER_VISION_RETRY_DELAY = float(
-    os.getenv("OPENROUTER_VISION_RETRY_DELAY", "2")
+    os.getenv(
+        "OPENROUTER_VISION_RETRY_DELAY",
+        "2",
+    )
 )
 
 
@@ -62,9 +79,10 @@ def call_agent(
     expect_json: bool = True,
 ):
     """
-    Call Ollama Mistral for local agent evaluation.
+    Call Ollama for local agent evaluation.
 
     If expect_json=True, parses and returns a dict.
+
     If expect_json=False, returns raw text.
     """
 
@@ -133,7 +151,9 @@ def describe_diagram(
             mime_type,
         )
 
-    return _describe_diagram_ollama(image_bytes)
+    return _describe_diagram_ollama(
+        image_bytes,
+    )
 
 
 # LOCAL VISION - OLLAMA + LLAVA
@@ -148,7 +168,7 @@ def _describe_diagram_ollama(
     import ollama
 
     b64 = base64.b64encode(
-        image_bytes
+        image_bytes,
     ).decode("utf-8")
 
     response = ollama.chat(
@@ -175,11 +195,13 @@ def _describe_diagram_ollama(
                     "- Queues, caches and messaging systems. "
 
                     "Do not invent components that are not visible. "
-                    "If a label or connection is unclear, explicitly "
-                    "state that it is unclear. "
 
-                    "Produce a detailed architecture description that "
-                    "will be passed to an architecture evaluation system."
+                    "If a label or connection is unclear, "
+                    "explicitly state that it is unclear. "
+
+                    "Produce a detailed architecture description "
+                    "that will be passed to an architecture "
+                    "evaluation system."
                 ),
                 "images": [b64],
             }
@@ -215,7 +237,7 @@ def _call_openrouter_vision_model(
         )
 
     b64 = base64.b64encode(
-        image_bytes
+        image_bytes,
     ).decode("utf-8")
 
     client = OpenAI(
@@ -233,8 +255,9 @@ def _call_openrouter_vision_model(
                     "You are an expert software architect "
                     "analyzing a software architecture diagram. "
 
-                    "Carefully inspect the image and produce a "
-                    "detailed text representation of the architecture. "
+                    "Carefully inspect the image and produce "
+                    "a detailed text representation of the "
+                    "architecture. "
 
                     "Identify: "
                     "- Every visible component "
@@ -251,17 +274,17 @@ def _call_openrouter_vision_model(
                     "- Load balancers and gateways "
                     "- Cloud infrastructure. "
 
-                    "Do NOT invent technologies or components that "
-                    "are not visible. "
+                    "Do NOT invent technologies or components "
+                    "that are not visible. "
 
-                    "If a label is difficult to read, say that it "
-                    "is unclear rather than guessing. "
+                    "If a label is difficult to read, say that "
+                    "it is unclear rather than guessing. "
 
                     "If the direction of a connection is unclear, "
                     "state that explicitly. "
 
-                    "The resulting description will be passed to "
-                    "an architecture evaluation system."
+                    "The resulting description will be passed "
+                    "to an architecture evaluation system."
                 ),
             },
             {
@@ -314,16 +337,21 @@ def _describe_diagram_openrouter(
     Cloud diagram analysis using an ordered OpenRouter
     vision-model pool.
 
-    Primary:
-        OPENROUTER_VISION_MODEL
+    The primary model is tried first.
 
-    Fallbacks:
-        OPENROUTER_VISION_FALLBACK_MODELS
+    If it fails because of rate limiting or another
+    request error, the next configured vision model
+    is tried automatically.
     """
 
     if not OPENROUTER_API_KEY:
         raise RuntimeError(
             "OPENROUTER_API_KEY is not configured."
+        )
+
+    if not OPENROUTER_VISION_MODELS:
+        raise RuntimeError(
+            "No OpenRouter vision models are configured."
         )
 
     errors = []
@@ -338,7 +366,7 @@ def _describe_diagram_openrouter(
             f"[ArchLens] Vision model {index}: {model}"
         )
 
-    # Try each vision model
+    # TRY EACH VISION MODEL
 
     for model in OPENROUTER_VISION_MODELS:
 
@@ -348,7 +376,6 @@ def _describe_diagram_openrouter(
         ):
 
             try:
-
                 print(
                     f"[ArchLens] Trying vision model: "
                     f"{model}"
@@ -397,8 +424,9 @@ def _describe_diagram_openrouter(
                     f"{error_message}"
                 )
 
-                if attempt < OPENROUTER_VISION_RETRIES:
+                # RETRY CURRENT MODEL
 
+                if attempt < OPENROUTER_VISION_RETRIES:
                     time.sleep(
                         OPENROUTER_VISION_RETRY_DELAY
                         * attempt
@@ -408,7 +436,7 @@ def _describe_diagram_openrouter(
             "[ArchLens] Moving to next vision model."
         )
 
-    # Everything failed
+    # ALL MODELS FAILED
 
     raise RuntimeError(
         "All configured OpenRouter vision models failed. "
